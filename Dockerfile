@@ -15,7 +15,7 @@ RUN go mod tidy
 COPY . .
 
 # Build the Go app
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags '-s' -o url-shortener ./api/main.go
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags '-s' -o url-shortener ./cmd/main.go
 
 # Final stage
 FROM alpine:latest

@@ -4,8 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"time"
-	"url-shortener/api/models"
-	"url-shortener/api/queries"
+	"url-shortener/internal/models"
+	"url-shortener/internal/queries"
 
 	"github.com/go-redis/redis/v8"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -43,7 +43,9 @@ func (s *URLService) ShortenURL(original string, expiry int64, expiredAt int64) 
 
 	// Store in Redis
 	s.redisClient.HSet(s.redisClient.Context(), shortened, "original", original)
-	s.redisClient.ExpireAt(s.redisClient.Context(), shortened, time.Unix(expiredAt, 0))
+	if expiredAt > 0 {
+		s.redisClient.ExpireAt(s.redisClient.Context(), shortened, time.Unix(expiredAt, 0))
+	}
 
 	return url, nil
 }
@@ -104,4 +106,30 @@ func generateShortenedURL() string {
 	b := make([]byte, 6) // 6 bytes will give us 8 characters in base64
 	rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func (s *URLService) UpdateShortURL(shortened string, expiry int64, expiredAt int64) (*models.URL, error) {
+	// Fetch the URL model from MongoDB
+	url, err := s.urlQueries.FindURL(shortened)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.urlQueries.UpdateShortURL(shortened, expiry, expiredAt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update in Redis
+	s.redisClient.HSet(s.redisClient.Context(), shortened, "original", url.Original)
+	if expiredAt > 0 {
+		s.redisClient.ExpireAt(s.redisClient.Context(), shortened, time.Unix(expiredAt, 0))
+	} else {
+		s.redisClient.Persist(s.redisClient.Context(), shortened)
+	}
+
+	url.Expiry = expiry
+	url.ExpiredAt = expiredAt
+
+	return &url, nil
 }

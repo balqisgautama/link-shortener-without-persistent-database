@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"log"
-	"url-shortener/api/handlers"
-	"url-shortener/api/routes"
-	"url-shortener/api/services"
+	"url-shortener/internal/handlers"
+	"url-shortener/internal/routes"
+	"url-shortener/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"

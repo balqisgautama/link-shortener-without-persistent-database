@@ -3,7 +3,7 @@ package queries
 import (
 	"context"
 	"time"
-	"url-shortener/api/models"
+	"url-shortener/internal/models"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -52,7 +52,11 @@ func (q *URLQueries) GetSortedURLs(ascending bool, page int, limit int, isExpire
 		if *isExpired {
 			filter["expiredat"] = bson.M{"$lt": time.Now().Unix()} // Expired URLs
 		} else {
-			filter["expiredat"] = bson.M{"$gte": time.Now().Unix()} // Non-expired URLs
+			// Non-expired URLs
+			filter["$or"] = []bson.M{
+				{"expiredat": bson.M{"$eq": 0}},
+				{"expiredat": bson.M{"$gte": time.Now().Unix()}},
+			}
 		}
 	}
 
@@ -75,4 +79,29 @@ func (q *URLQueries) GetSortedURLs(ascending bool, page int, limit int, isExpire
 		urls = append(urls, url)
 	}
 	return urls, int(totalCount), nil
+}
+
+func (q *URLQueries) UpdateShortURL(shortURL string, expiry int64, expiredAt int64) error {
+	update := bson.M{"$set": bson.M{
+		"expiry":    expiry,
+		"expiredat": expiredAt,
+	}}
+
+	filter := bson.M{
+		"shortened": shortURL,
+		"$or": []bson.M{
+			{"expiredat": bson.M{"$eq": 0}},
+			{"expiredat": bson.M{"$gte": time.Now().Unix()}},
+		},
+	}
+	result, err := q.collection.UpdateOne(context.TODO(), filter, update)
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
 }

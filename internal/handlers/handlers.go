@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-	"url-shortener/api/models"
-	"url-shortener/api/services"
+	"url-shortener/internal/models"
+	"url-shortener/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,7 +25,15 @@ func (h *URLHandler) ShortenURL(c *gin.Context) {
 		return
 	}
 
-	expiredAt := time.Now().Add(time.Duration(url.Expiry) * time.Second).Unix()
+	if url.Expiry < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "expiry cannot be negative"})
+		return
+	}
+
+	expiredAt := int64(0)
+	if url.Expiry > 0 {
+		expiredAt = time.Now().Add(time.Duration(url.Expiry) * time.Second).Unix()
+	}
 	result, err := h.service.ShortenURL(url.Original, url.Expiry, expiredAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -73,4 +81,29 @@ func (h *URLHandler) GetSortedURLs(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func (h *URLHandler) UpdateShortURL(c *gin.Context) {
+	var url models.URL
+	if err := c.ShouldBindJSON(&url); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if url.Expiry < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "expiry cannot be negative"})
+		return
+	}
+
+	expiredAt := int64(0)
+	if url.Expiry > 0 {
+		expiredAt = time.Now().Add(time.Duration(url.Expiry) * time.Second).Unix()
+	}
+	result, err := h.service.UpdateShortURL(url.Shortened, url.Expiry, expiredAt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }
