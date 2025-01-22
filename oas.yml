@@ -1,0 +1,55 @@
+openapi: 3.0.0  
+info:  
+  title: URL Shortener API  
+  version: 1.0.0  
+paths:  
+  /shorten:  
+    post:  
+      summary: Shorten a URL  
+      requestBody:  
+        required: true  
+        content:  
+          application/json:  
+            schema:  
+              type: object  
+              properties:  
+                shortened:  
+                  type: string  
+                target:  
+                  type: string  
+                expiry:  
+                  type: string  
+                  format: date-time  
+      responses:  
+        '201':  
+          description: URL shortened successfully  
+  /fetch/{shortened}:  
+    get:  
+      summary: Fetch the target URL  
+      parameters:  
+        - name: shortened  
+          in: path  
+          required: true  
+          schema:  
+            type: string  
+      responses:  
+        '302':  
+          description: Redirect to target URL  
+  /click/{shortened}:  
+    get:  
+      summary: Increment click counter  
+      parameters:  
+        - name: shortened  
+          in: path  
+          required: true  
+          schema:  
+            type: string  
+      responses:  
+        '200':  
+          description: Click counter incremented  
+  /sort:  
+    get:  
+      summary: Sort URLs by click count  
+      responses:  
+        '200':  
+          description: List of sorted URLs  
