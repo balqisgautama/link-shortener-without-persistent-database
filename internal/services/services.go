@@ -3,6 +3,8 @@ package services
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"time"
 	"url-shortener/internal/models"
 	"url-shortener/internal/queries"
@@ -25,81 +27,60 @@ func NewURLService(db *mongo.Database, redisClient *redis.Client, baseURL string
 	}
 }
 
-func (s *URLService) ShortenURL(original string, expiry int64, expiredAt int64) (models.URL, error) {
+func (s *URLService) ShortenURL(original string, expiry int64) (models.URL, error) {
+	if expiry == 0 {
+		expiry = 60 // default expiry in a second
+	}
+	expiredAt := time.Duration(expiry) * time.Second
+
 	shortened := generateShortenedURL()
 	url := models.URL{
-		Original:   original,
-		BaseURL:    s.baseURL,
-		Shortened:  shortened,
-		ClickCount: 0,
-		Expiry:     expiry,
-		ExpiredAt:  expiredAt,
-		CreatedAt:  time.Now().Unix(),
+		Original:       original,
+		BaseURL:        s.baseURL,
+		Shortened:      shortened,
+		ClickCount:     0,
+		Expiry:         expiry,
+		ExpiryDuration: int64(expiredAt),
+		ExpiredAt:      time.Now().Add(expiredAt).Unix(),
+		CreatedAt:      time.Now().Unix(),
 	}
 
-	if err := s.urlQueries.InsertURL(url); err != nil {
+	b, err := json.Marshal(url)
+	if err != nil {
 		return models.URL{}, err
 	}
 
 	// Store in Redis
-	s.redisClient.HSet(s.redisClient.Context(), shortened, "original", original)
-	if expiredAt > 0 {
-		s.redisClient.ExpireAt(s.redisClient.Context(), shortened, time.Unix(expiredAt, 0))
-	}
+	key := fmt.Sprintf(`shorten:%s`, shortened)
+	s.redisClient.Set(s.redisClient.Context(), key, string(b), expiredAt)
 
 	return url, nil
 }
 
 func (s *URLService) FetchURL(shortened string) (models.URL, error) {
 	// Fetch from Redis first
-	original, err := s.redisClient.HGet(s.redisClient.Context(), shortened, "original").Result()
+	key := fmt.Sprintf(`shorten:%s`, shortened)
+	original, err := s.redisClient.Get(s.redisClient.Context(), key).Result()
 	if err != nil {
 		return models.URL{}, err
 	}
 
-	// Fetch the URL model from MongoDB
-	url, err := s.urlQueries.FindURL(shortened)
+	var url models.URL
+	err = json.Unmarshal([]byte(original), &url)
 	if err != nil {
 		return models.URL{}, err
 	}
 
-	// Update the original URL in the model
-	url.Original = original
+	url.ClickCount += 1
+
+	b, err := json.Marshal(url)
+	if err != nil {
+		return models.URL{}, err
+	}
+
+	s.redisClient.Set(s.redisClient.Context(), key, string(b), time.Duration(url.ExpiryDuration))
 
 	return url, nil
-}
-
-func (s *URLService) IncrementClickCounter(shortened string) {
-	s.urlQueries.UpdateClickCount(shortened)
-}
-
-func (s *URLService) GetSortedURLs(ascending bool, page int, limit int, isExpired *bool) (models.PaginatedURLsResponse, error) {
-	urls, totalCount, err := s.urlQueries.GetSortedURLs(ascending, page, limit, isExpired)
-	if err != nil {
-		return models.PaginatedURLsResponse{}, err
-	}
-
-	totalPages := totalCount / limit
-
-	response := models.PaginatedURLsResponse{
-		URLs:        urls,
-		TotalItems:  totalCount,
-		PageSize:    limit,
-		TotalPages:  totalPages,
-		CurrentPage: page,
-	}
-
-	// Calculate next and previous page
-	if totalCount > page*limit {
-		nextPage := page + 1
-		response.NextPage = &nextPage
-	}
-	if page > 1 && totalPages > 0 {
-		prevPage := page - 1
-		response.PrevPage = &prevPage
-	}
-
-	return response, nil
 }
 
 func generateShortenedURL() string {
@@ -108,28 +89,34 @@ func generateShortenedURL() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func (s *URLService) UpdateShortURL(shortened string, expiry int64, expiredAt int64) (*models.URL, error) {
-	// Fetch the URL model from MongoDB
-	url, err := s.urlQueries.FindURL(shortened)
+func (s *URLService) UpdateShortURL(shortened string, expiry int64) (*models.URL, error) {
+	if expiry == 0 {
+		expiry = 60 // default expiry in a second
+	}
+	expiredAt := time.Duration(expiry) * time.Second
+
+	key := fmt.Sprintf(`shorten:%s`, shortened)
+	original, err := s.redisClient.Get(s.redisClient.Context(), key).Result()
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.urlQueries.UpdateShortURL(shortened, expiry, expiredAt)
+	var url models.URL
+	err = json.Unmarshal([]byte(original), &url)
 	if err != nil {
 		return nil, err
-	}
-
-	// Update in Redis
-	s.redisClient.HSet(s.redisClient.Context(), shortened, "original", url.Original)
-	if expiredAt > 0 {
-		s.redisClient.ExpireAt(s.redisClient.Context(), shortened, time.Unix(expiredAt, 0))
-	} else {
-		s.redisClient.Persist(s.redisClient.Context(), shortened)
 	}
 
 	url.Expiry = expiry
-	url.ExpiredAt = expiredAt
+	url.ExpiryDuration = int64(expiredAt)
+	url.ExpiredAt = time.Now().Add(expiredAt).Unix()
+
+	b, err := json.Marshal(url)
+	if err != nil {
+		return nil, err
+	}
+
+	s.redisClient.Set(s.redisClient.Context(), key, string(b), expiredAt)
 
 	return &url, nil
 }
