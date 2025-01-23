@@ -2,54 +2,149 @@ openapi: 3.0.0
 info:  
   title: URL Shortener API  
   version: 1.0.0  
+  description: An API to shorten URLs and manage their expiry.  
+servers:  
+  - url: http://localhost:8080  
+    description: Development server  
+  
 paths:  
   /shorten:  
     post:  
-      summary: Shorten a URL  
+      summary: Create a shortened URL  
       requestBody:  
         required: true  
         content:  
           application/json:  
             schema:  
-              type: object  
-              properties:  
-                shortened:  
-                  type: string  
-                target:  
-                  type: string  
-                expiry:  
-                  type: string  
-                  format: date-time  
+              $ref: '#/components/schemas/CreateShortenedUrlRequest'  
       responses:  
-        '201':  
-          description: URL shortened successfully  
-  /fetch/{shortened}:  
+        '200':  
+          description: Shortened URL details  
+          content:  
+            application/json:  
+              schema:  
+                $ref: '#/components/schemas/ShortenedUrlResponse'  
+        '400':  
+          description: Invalid request body  
+        '500':  
+          description: Internal server error  
+    put:  
+      summary: Update the expiry of a shortened URL  
+      requestBody:  
+        required: true  
+        content:  
+          application/json:  
+            schema:  
+              $ref: '#/components/schemas/UpdateShortenedUrlRequest'  
+      responses:  
+        '200':  
+          description: Updated shortened URL details  
+          content:  
+            application/json:  
+              schema:  
+                $ref: '#/components/schemas/ShortenedUrlResponse'  
+        '400':  
+          description: Invalid request body  
+        '404':  
+          description: Shortened URL not found  
+        '500':  
+          description: Internal server error 
+  /shorten/{shortened}:  
     get:  
-      summary: Fetch the target URL  
+      summary: Retrieve details of a shortened URL  
       parameters:  
-        - name: shortened  
-          in: path  
+        - in: path  
+          name: shortened  
           required: true  
           schema:  
             type: string  
-      responses:  
-        '302':  
-          description: Redirect to target URL  
-  /click/{shortened}:  
-    get:  
-      summary: Increment click counter  
-      parameters:  
-        - name: shortened  
-          in: path  
-          required: true  
-          schema:  
-            type: string  
+          description: The shortened URL identifier.  
+          example: "ICC5zKG8"  
       responses:  
         '200':  
-          description: Click counter incremented  
-  /sort:  
-    get:  
-      summary: Sort URLs by click count  
-      responses:  
-        '200':  
-          description: List of sorted URLs  
+          description: Shortened URL details  
+          content:  
+            application/json:  
+              schema:  
+                $ref: '#/components/schemas/ShortenedUrlResponse'  
+        '404':  
+          description: Shortened URL not found  
+        '500':  
+          description: Internal server error  
+  
+components:  
+  schemas:  
+    CreateShortenedUrlRequest:  
+      type: object  
+      properties:  
+        original:  
+          type: string  
+          description: The original URL to be shortened.  
+          example: "https://www.google.com/"  
+        expiry:  
+          type: integer  
+          description: The duration in seconds until the shortened URL expires.  
+          example: 60  
+      required:  
+        - original  
+        - expiry  
+  
+    UpdateShortenedUrlRequest:  
+      type: object  
+      properties:  
+        shortened:  
+          type: string  
+          description: The shortened URL identifier.  
+          example: "ICC5zKG8"  
+        expiry:  
+          type: integer  
+          description: The new expiry duration in seconds.  
+          example: 90  
+      required:  
+        - shortened  
+        - expiry  
+  
+    ShortenedUrlResponse:  
+      type: object  
+      properties:  
+        original:  
+          type: string  
+          description: The original URL.  
+          example: "https://www.google.com/"  
+        base_url:  
+          type: string  
+          description: The base URL of the service.  
+          example: "http://localhost:8080"  
+        shortened:  
+          type: string  
+          description: The shortened URL identifier.  
+          example: "ICC5zKG8"  
+        click_count:  
+          type: integer  
+          description: The number of times the shortened URL has been clicked.  
+          example: 5  
+        expiry:  
+          type: integer  
+          description: The duration in seconds until the shortened URL expires.  
+          example: 90  
+        expiry_duration:  
+          type: integer  
+          description: The expiry duration in nanoseconds.  
+          example: 90000000000  
+        expired_at:  
+          type: integer  
+          description: The timestamp when the shortened URL will expire.  
+          example: 1737601770  
+        created_at:  
+          type: integer  
+          description: The timestamp when the shortened URL was created.  
+          example: 1737601667  
+      required:  
+        - original  
+        - base_url  
+        - shortened  
+        - click_count  
+        - expiry  
+        - expiry_duration  
+        - expired_at  
+        - created_at  
