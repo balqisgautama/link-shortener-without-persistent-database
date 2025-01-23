@@ -1,3 +1,11 @@
+# URL Shortener API  
+  
+## Description  
+  
+The URL Shortener API is a simple service that allows users to create shortened versions of long URLs. It provides endpoints to create, retrieve, and update shortened URLs, including managing their expiry times.  
+
+## Getting Started 
+
 ### Prerequisites
 
 - Go (example: 1.23) installed on your machine.
